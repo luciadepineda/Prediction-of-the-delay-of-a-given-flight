@@ -1,0 +1,217 @@
+---
+title: "Prediction of the delay of a given flight"
+output: html_notebook
+---
+
+_Aprenentatge Automàtic 1_
+_Lucía De Pineda i Adriana Diaz_
+
+```{r}
+library(MASS)
+library(ggplot2)
+library(cclust)
+library(dplyr)
+library(factoextra)
+library(readr)
+```
+
+## Data exploration process
+
+Loading the data:
+```{r}
+Flights = read.csv("airlines.arff", header = FALSE, comment.char = "@")
+```
+
+Naming the variables and showing the dataframe:
+```{r}
+# Variables
+names(Flights) = c("Airline", "Flight", "AirportFrom", "AirportTo", "DayOfWeek", "Length", "Time", "Delay")
+Flights
+```
+
+
+Analyzing the variables:
+```{r}
+summary(Flights)
+```
+
+Categorical variables: Airline, Flight, AirportFrom, AirportTo, DayOfWeek, Delay
+
+Numeric variables: Time, Length
+
+Frequence of values for target variable:
+```{r}
+table(Flights$Delay)
+hist(Flights$Delay, breaks = 2, main = "Histogram of Delay", col = "lightblue")
+```
+
+Histogram and boxplot of length:
+```{r}
+Length1 = Flights$Length
+hist(Length1, main="Histogram of Length (with abnormal data)", col=2)
+boxplot(Length1, main="Boxplot of Length (with abnormal data)", col="lightblue")
+```
+
+
+Elimination of abnormal values:
+```{r}
+Flights = Flights[Flights[,"Length"] >= 300,]
+```
+
+Checking there are not missing values:
+```{r}
+apply(is.na(Flights),2,sum)
+```
+
+
+Transforming variables to factors:
+```{r}
+Airline=as.factor(Flights$Airline)
+Flight=as.factor(Flights$Flight)
+AirportFrom=as.factor(Flights$AirportFrom)
+AirportTo=as.factor(Flights$AirportTo)
+DayOfWeek=as.factor(Flights$DayOfWeek)
+Delay=as.factor(Flights$Delay)
+Length=Flights$Length
+Time=Flights$Time
+```
+
+Creation of a new variable:
+We convert Time from minutes to hours and Length from miles to km.
+```{r}
+Speed = (Length / Time) * 96.56064
+```
+
+```{r}
+length(Airline)
+```
+
+Analyzing the distribution of the continuous variables:
+```{r}
+hist(Time, col=2)
+hist(Length, main="Histogram of Length", col=2)
+boxplot(Length, main="Boxplot of Length (without abnormal data)", col="lightblue")
+```
+
+Applying the logarithm to see if the variables are now Gaussian:
+```{r}
+hist(log10(Time), col="lightgreen")
+hist(log10(Length), col="lightgreen")
+```
+
+We apply the logarithm to the variables time and length to normalize them:
+```{r}
+time_log = log10(Time)
+length_log = log10(Length)
+```
+
+
+We combine the transformations into a new dataframe (except Time and Length, we will add them after the visualization of the data):
+```{r}
+Flights.new = data.frame(Airline,Flight,AirportFrom,AirportTo,DayOfWeek,Length,Time,Delay,Speed)
+
+attach(Flights.new)
+```
+
+```{r}
+summary(Flights.new)
+```
+
+
+## Visualization of the data
+
+Delay for each day of the week:
+```{r}
+Delayxday = table(Delay, DayOfWeek)
+
+barplot(Delayxday, beside = TRUE, col = c("pink", "orange"), main = "Delay for each day of the week")
+
+legend("bottomleft", legend=rownames(Delayxday), col="black", 
+      fill = c("pink", "orange"), cex=0.65)
+
+```
+To plot de delay for each rank of length, we first divide de values of length into different segments:
+
+```{r}
+Length.cat = cut(Length, breaks = seq(300, 1439, 200))   
+(table(Length.cat))
+```
+Contingency table:
+```{r}
+(DelayxLength = table(Delay, Length.cat)) # contingency table
+
+round(prop.table(DelayxLength), digits=3)  # relative freqencies, rounded to 3 digits 
+round(prop.table(DelayxLength) * 100, digits=1)  # total percentages
+
+round(prop.table(DelayxLength, 1), digits=3) # table of relative frequencies (row-wise)
+(DelayxLength.rel = round(prop.table(DelayxLength, 2), digits=3)) # table of relative frequencies (column-wise)
+```
+And finally we plot it:
+```{r}
+DelayxLength = table(Delay, Length.cat)
+
+barplot(DelayxLength, beside = TRUE, col = c("pink", "orange"), main = "Delay per length", cex.names = 0.85)
+
+legend("bottomleft", legend=rownames(DelayxLength), col="black", 
+      fill = c("pink", "orange"), cex=0.65)
+
+```
+We do the same for Time:
+```{r}
+Time.cat1 = cut(Time, breaks = seq(25, 425, 50))   
+Time.cat2 = cut(Time, breaks = seq(425, 625, 100))   
+
+(table(Time.cat1))
+(table(Time.cat2))
+
+Time.cat = c(Time.cat1, Time.cat2)
+(table(Time.cat))
+
+Time.cat_eq = cut(Time, breaks = seq(25, 625, 50))
+(table(Time.cat_eq))
+
+```
+
+```{r}
+(DelayxTime = table(Delay, Time.cat_eq)) # contingency table
+
+round(prop.table(DelayxTime), digits=3)  # relative freqencies, rounded to 3 digits 
+round(prop.table(DelayxTime) * 100, digits=1)  # total percentages
+
+round(prop.table(DelayxTime, 1), digits=3) # table of relative frequencies (row-wise)
+(DelayxTime.rel = round(prop.table(DelayxTime, 2), digits=3)) # table of relative frequencies (column-wise)
+```
+
+```{r}
+DelayxTime = table(Delay, Time.cat_eq)
+
+barplot(DelayxTime, beside = TRUE, col = c("pink", "orange"), main = "Delay per time", cex.names = 0.5)
+
+legend("bottomleft", legend=rownames(DelayxTime), col="black", 
+      fill = c("pink", "orange"), cex=0.65)
+
+```
+
+Now, we can add the transformated continous variables into the dataframe, also standardizing them:
+```{r}
+Time = scale(time_log)
+Length = scale(length_log)
+Speed = scale(Speed)
+Flights.new = data.frame(Airline,Flight,AirportFrom,AirportTo,DayOfWeek,Length,Time,Delay,Speed)
+
+attach(Flights.new)
+```
+
+# Clustering
+
+We plot our data using two clusters, using the method kmeans.
+```{r}
+kmeans = kmeans(Flights.new[,c( "Length","Time")], centers=2)
+fviz_cluster(kmeans, data=Flights.new[,c(  "Length","Time")])
+```
+
+We save our processed data into a csv document, for the next part of the project.
+```{r}
+write.csv(Flights.new, "airlines2.csv")
+```
+
